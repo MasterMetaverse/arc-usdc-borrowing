@@ -18,6 +18,7 @@
 
 "use client";
 
+import { ArrowRightLeft, ShieldAlert, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -55,26 +56,57 @@ export function LoanPanel({
   const closeExec = useAsyncAction<unknown>("Close loan");
 
   const hasLoan = !!activeLoanId;
+  const canBorrow = !!session && !!borrowAmount && Number(borrowAmount) > 0;
+  const canRepay = !!session && !!repayAmount && Number(repayAmount) > 0 && hasLoan;
+  const canClose = !!session && hasLoan;
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
-        <CardTitle className="text-base flex items-center gap-2">
-          Loan
-          <Badge variant="secondary">USDC</Badge>
-          {hasLoan && <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">Active</Badge>}
-        </CardTitle>
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            Loan
+            <Badge variant="secondary">USDC</Badge>
+            {hasLoan && <Badge className="bg-amber-500/20 text-amber-400 border-amber-500/30">Active</Badge>}
+          </CardTitle>
+          <div className="rounded-full border border-border bg-muted px-2 py-1 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+            {hasLoan ? "Position open" : "Ready"}
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+
+      <CardContent className="space-y-4">
+        <div className="rounded-xl border border-border bg-gradient-to-r from-primary/5 to-secondary/20 p-3">
+          <div className="flex items-start gap-2">
+            <div className="rounded-md bg-emerald-500/10 p-1.5 text-emerald-400">
+              <Sparkles className="size-4" />
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">Borrow flow</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {hasLoan
+                  ? "Borrow more against your existing cirBTC collateral or repay to reduce risk."
+                  : "Open a loan by borrowing USDC against cirBTC collateral and set a target health factor."}
+              </p>
+            </div>
+          </div>
+        </div>
+
         <Tabs defaultValue="borrow">
           <TabsList className="w-full">
             <TabsTrigger value="borrow" className="flex-1">Borrow</TabsTrigger>
             <TabsTrigger value="repay" className="flex-1">Repay</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="borrow" className="space-y-4">
+          <TabsContent value="borrow" className="space-y-4 pt-4">
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Amount (USDC)</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Amount (USDC)</p>
+                <div className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <ArrowRightLeft className="size-3" />
+                  Stable borrow
+                </div>
+              </div>
               <Input
                 type="number"
                 value={borrowAmount}
@@ -98,7 +130,7 @@ export function LoanPanel({
                   </div>
                   <Button
                     variant="outline"
-                    disabled={collateralCheck.isLoading || !borrowAmount}
+                    disabled={collateralCheck.isLoading || !borrowAmount || Number(borrowAmount) <= 0}
                     onClick={() =>
                       collateralCheck.run(() =>
                         postJson("/api/borrow/required-collateral-quote", {
@@ -123,7 +155,7 @@ export function LoanPanel({
               <Button
                 className="flex-1"
                 variant="outline"
-                disabled={borrowQuote.isLoading || !session || !borrowAmount}
+                disabled={borrowQuote.isLoading || !canBorrow}
                 onClick={() =>
                   borrowQuote.run(() =>
                     postJson("/api/borrow/borrow-quote", {
@@ -138,7 +170,7 @@ export function LoanPanel({
               </Button>
               <Button
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
-                disabled={!borrowQuote.isSuccess || borrowExec.isLoading}
+                disabled={!borrowQuote.isSuccess || borrowExec.isLoading || !canBorrow}
                 onClick={async () => {
                   const result = await borrowExec.run(() =>
                     postJson("/api/borrow/borrow", {
@@ -160,9 +192,15 @@ export function LoanPanel({
             <ActionStatus {...borrowExec} loadingLabel="Waiting for PIN approval…" successLabel="Borrow complete." />
           </TabsContent>
 
-          <TabsContent value="repay" className="space-y-4">
+          <TabsContent value="repay" className="space-y-4 pt-4">
             <div>
-              <p className="text-xs font-medium text-muted-foreground mb-2">Amount (USDC)</p>
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Amount (USDC)</p>
+                <div className="inline-flex items-center gap-1 rounded-full border border-border bg-muted/40 px-2 py-0.5 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                  <ShieldAlert className="size-3" />
+                  Risk check
+                </div>
+              </div>
               <Input
                 type="number"
                 value={repayAmount}
@@ -180,7 +218,7 @@ export function LoanPanel({
                   <Button
                     className="flex-1"
                     variant="outline"
-                    disabled={repayQuote.isLoading || !repayAmount}
+                    disabled={repayQuote.isLoading || !canRepay}
                     onClick={() =>
                       repayQuote.run(() => postJson("/api/borrow/repay-quote", { loanId: activeLoanId, amount: repayAmount }))
                     }
@@ -189,7 +227,7 @@ export function LoanPanel({
                   </Button>
                   <Button
                     className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={!repayQuote.isSuccess || repayExec.isLoading}
+                    disabled={!repayQuote.isSuccess || repayExec.isLoading || !canRepay}
                     onClick={async () => {
                       const result = await repayExec.run(() =>
                         postJson("/api/borrow/repay", {
@@ -216,16 +254,16 @@ export function LoanPanel({
 
         {hasLoan && (
           <>
-            <Separator className="my-4" />
+            <Separator className="my-2" />
             <div className="space-y-2">
               <p className="text-xs text-muted-foreground">
-                Repay everything and return your collateral in one call.
+                Repay everything and return collateral in one safe close action.
               </p>
               <div className="flex gap-2">
                 <Button
                   variant="outline"
                   className="flex-1"
-                  disabled={closeQuote.isLoading}
+                  disabled={closeQuote.isLoading || !canClose}
                   onClick={() => closeQuote.run(() => postJson("/api/borrow/close-quote", { loanId: activeLoanId }))}
                 >
                   {closeQuote.isLoading ? "Quoting…" : "Quote close"}
@@ -233,7 +271,7 @@ export function LoanPanel({
                 <Button
                   variant="destructive"
                   className="flex-1"
-                  disabled={!closeQuote.isSuccess || closeExec.isLoading}
+                  disabled={!closeQuote.isSuccess || closeExec.isLoading || !canClose}
                   onClick={async () => {
                     const result = await closeExec.run(() =>
                       postJson("/api/borrow/close", { sessionId: session?.sessionId, loanId: activeLoanId }),
